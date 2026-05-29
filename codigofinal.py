@@ -1,4 +1,6 @@
 from lark import Lark, Transformer
+from collections import ChainMap
+import warnings
 
 # Definindo a gramática para o subconjunto da linguagem Java
 java_gramatica = r"""
@@ -11,20 +13,23 @@ java_gramatica = r"""
     estrutura_controle: "if" "(" expressao ")" "{" corpo_funcao* "}" ("else" "{" corpo_funcao* "}")?
     expressao_stmt: expressao ";"
     expressao: atribuicao
-           | comparacao
-           | chamada_funcao
-           | IDENTIFICADOR
-           | NUMERO
-           | STRING
+         | comparacao
     atribuicao: IDENTIFICADOR "=" expressao
-    comparacao: soma ( ">" soma )*
-    soma: termo ( ("+" | "-") termo )*
-    termo: fator ( ("*" | "/") fator )*
+    comparacao: soma (MAIOR soma)*
+    soma: termo ((MAIS | MENOS) termo)*
+    termo: fator ((MULT | DIV) fator)*
+
+    MAIOR: ">"
+    MAIS: "+"
+    MENOS: "-"
+    MULT: "*"
+    DIV: "/"
     fator: chamada_funcao | IDENTIFICADOR | NUMERO | STRING | "(" expressao ")"
     chamada_funcao: IDENTIFICADOR "(" [argumentos] ")"
     argumentos: expressao ("," expressao)*
-    comando_saida: "System.out.println" "(" expressao ")" ";"
-    tipo: "int" | "String" | "boolean" | "double" | "float"
+    comando_saida: "System" "." "out" "." "println" "(" expressao ")" ";"
+    tipo: TIPO
+    TIPO.2: "int" | "String" | "boolean" | "double" | "float"
     IDENTIFICADOR: /[a-zA-Z_][a-zA-Z0-9_]*/
     NUMERO: /\d+/
     STRING: ESCAPED_STRING
@@ -44,11 +49,19 @@ class JavaTransformer(Transformer): # Transformador para converter a árvore de 
     def declaracao_classe(self, items): # Representação da declaração de classe como um dicionário, exemplo: {"classe": "MinhaClasse", "corpo": [metodo1, metodo2, ...]}
         return {"classe": items[0], "corpo": items[1:]}
 
-    def corpo_classe(self, items): # Representação da declaração de método como um dicionário, exemplo: {"metodo": "main", "corpo": [declaracao_variavel, estrutura_controle, ...]}
-        method_name = items[3]
-        body = items[5:] if len(items) > 5 else []
-        return {"metodo": method_name, "corpo": body}
+    def corpo_classe(self, items): # Representação da declaração de método como um dicionário
+        method_name = items[0]
 
+        #ignora parametro
+        if len(items) > 1 and "Tree" in str(type(items[1])):
+            body = items[2:]
+        else:
+            body = items[1:]
+
+        return {
+            "metodo": method_name,
+            "corpo": body
+    }
     def corpo_funcao(self, items): # Representação do corpo do método como um dicionário, exemplo: {"metodo": "minhaFuncao", "corpo": [declaracao_variavel, estrutura_controle, ...]}
         return items[0]
 
@@ -71,7 +84,11 @@ class JavaTransformer(Transformer): # Transformador para converter a árvore de 
         return items[0]
 
     def atribuicao(self, items): # Representação da atribuição como um dicionário, exemplo: {"tipo": "atribuicao", "variavel": "x", "valor": 5}
-        return {"tipo": "atribuicao", "variavel": items[0], "valor": items[2]}
+        return {
+            "tipo": "atribuicao",
+            "variavel": items[0],
+            "valor": items[1]
+        }
 
     def comparacao(self, items): # Representação da comparação como um dicionário, exemplo: {"tipo": "comparacao", "operador": ">", "esquerda": ..., "direita": ...}
         if len(items) == 1:
@@ -120,6 +137,7 @@ class JavaTransformer(Transformer): # Transformador para converter a árvore de 
     def STRING(self, token): # Representação da string como uma string sem as aspas, exemplo: "Olá, mundo!" -> Olá, mundo!
         return str(token)[1:-1]
 
+    
 
 def analisar_codigo(codigo): # Função para analisar o código Java e detectar erros de sintaxe, retornando a AST se o código for válido ou None se houver erros de sintaxe
     try:
@@ -145,7 +163,110 @@ class MinhaClasse {
 }
 """
 analisar_codigo(codigo_java)
+class AnalisadorSemantico:
 
-# O código acima define uma gramática para um subconjunto da linguagem Java, cria um analisador usando a biblioteca lark e implementa uma função para analisar
-# o código Java e detectar erros de sintaxe. O exemplo de uso mostra como analisar um código Java válido. Você pode modificar o código Java para testar diferentes
-# casos, incluindo códigos com erros de sintaxe para verificar se o analisador está funcionando corretamente.
+    def __init__(self):
+
+        self.tabela_variaveis = ChainMap({})
+        self.tabela_classe = {}
+
+    def analisador_semantico(self, no):
+
+        #metodo
+        if "metodo" in no:
+
+            print(f"entrando no método: {no['metodo']}")
+
+            #criacao escopo
+            self.tabela_variaveis = self.tabela_variaveis.new_child()
+
+            #percorre comandos do metodo
+            for comando in no["corpo"]:
+                self.analisador_semantico(comando)
+
+            #warning variavel nao utilizada
+            for nome, info in self.tabela_variaveis.maps[0].items():
+
+                if info["usada"] == False:
+
+                    warnings.warn(
+                        f"variável '{nome}' não utilizada"
+                    )
+
+            #saida do escopo
+            self.tabela_variaveis = self.tabela_variaveis.parents
+
+            print(f"saindo do método: {no['metodo']}")
+
+        #variavel
+        elif "variavel" in no and no["tipo"] != "atribuicao":
+
+            nome = no["variavel"]
+
+            #variavel duplicada
+            if nome in self.tabela_variaveis.maps[0]:
+
+                print("Erro: Variável duplicada")
+
+            else:
+
+                #warning variavel global
+                if nome in self.tabela_variaveis:
+
+                    warnings.warn(
+                        f"Atenção a variável '{nome}' está sendo ocultada"
+                    )
+
+                self.tabela_variaveis[nome] = {
+                    "tipo": no["tipo"],
+                    "usada": False
+                }
+
+                print(f"variavel '{nome}' declarada")
+
+        #atribuicao
+        elif no.get("tipo") == "atribuicao":
+
+            nome = no["variavel"]
+
+            #variavel nao declarada
+            if nome not in self.tabela_variaveis:
+
+                print("Erro: variavel não declarada")
+
+            else:
+
+                #marca variavel como usada
+                self.tabela_variaveis[nome]["usada"] = True
+
+                print("variavel declarada")
+
+        #funcoes
+        elif no.get("tipo") == "chamada_funcao":
+
+            funcao = no["funcao"]
+
+            #funcao inexistente
+            if funcao not in self.tabela_classe:
+
+                print("Erro: função inexistente")
+
+            else:
+
+                print(f"função '{funcao}' encontrada")
+
+        #classe
+        elif "classe" in no:
+
+            for item in no["corpo"]:
+                self.analisador_semantico(item)
+#gera AST
+ast = analisar_codigo(codigo_java)
+
+#executa analise semantica
+if ast:
+    analisador_semantico = AnalisadorSemantico()
+
+    #percorre programa
+    for item in ast["programa"]:
+        analisador_semantico.analisador_semantico(item)
