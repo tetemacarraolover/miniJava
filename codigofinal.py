@@ -169,13 +169,14 @@ class AnalisadorSemantico:
 
         self.tabela_variaveis = ChainMap({})
         self.tabela_classe = {}
+        self.funcao_atual = ""
 
     def analisador_semantico(self, no):
 
         #metodo
         if "metodo" in no:
-
-            print(f"entrando no método: {no['metodo']}")
+            self.funcap_atual = no['metodo']
+            print(f"fun {self.funcao_atual}()")
 
             #criacao escopo
             self.tabela_variaveis = self.tabela_variaveis.new_child()
@@ -186,7 +187,8 @@ class AnalisadorSemantico:
 
             #warning variavel nao utilizada
             for nome, info in self.tabela_variaveis.maps[0].items():
-
+            # Lembrar o nome da função atual
+             
                 if info["usada"] == False:
 
                     warnings.warn(
@@ -196,7 +198,7 @@ class AnalisadorSemantico:
             #saida do escopo
             self.tabela_variaveis = self.tabela_variaveis.parents
 
-            print(f"saindo do método: {no['metodo']}")
+            print("ret")
 
         #variavel
         elif "variavel" in no and no["tipo"] != "atribuicao":
@@ -228,6 +230,7 @@ class AnalisadorSemantico:
         elif no.get("tipo") == "atribuicao":
 
             nome = no["variavel"]
+            valor = no["valor"]
 
             #variavel nao declarada
             if nome not in self.tabela_variaveis:
@@ -239,12 +242,12 @@ class AnalisadorSemantico:
                 #marca variavel como usada
                 self.tabela_variaveis[nome]["usada"] = True
 
-                print("variavel declarada")
+                print(f"set {self.funcao_atual}():{nome} {valor}")
 
         #funcoes
-        elif no.get("tipo") == "chamada_funcao":
-
+        elif no.get("tipo") == "chamada_funcao": 
             funcao = no["funcao"]
+
 
             #funcao inexistente
             if funcao not in self.tabela_classe:
@@ -252,14 +255,18 @@ class AnalisadorSemantico:
                 print("Erro: função inexistente")
 
             else:
-
-                print(f"função '{funcao}' encontrada")
+                print(f"sub {funcao}()")
 
         #classe
         elif "classe" in no:
 
             for item in no["corpo"]:
                 self.analisador_semantico(item)
+        #saida
+        elif no.get("tipo") == "saida":
+            print(f"saida: {no['expressao']}")
+
+
 #gera AST
 ast = analisar_codigo(codigo_java)
 
@@ -270,3 +277,12 @@ if ast:
     #percorre programa
     for item in ast["programa"]:
         analisador_semantico.analisador_semantico(item)
+
+class Interpretador:
+    def __init__(self, bytecode):
+        self.bytecode = bytecode
+        self.variaveis = {}
+
+def executar(self):
+    for item in self.bytecode:
+        pass
