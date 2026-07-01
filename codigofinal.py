@@ -176,7 +176,7 @@ class AnalisadorSemantico:
         #metodo
         if "metodo" in no:
             self.funcap_atual = no['metodo']
-            print(f"fun {self.funcao_atual}()")
+            print(f"fun {self.funcao_atual}()") # <<<<<
 
             #criacao escopo
             self.tabela_variaveis = self.tabela_variaveis.new_child()
@@ -198,7 +198,7 @@ class AnalisadorSemantico:
             #saida do escopo
             self.tabela_variaveis = self.tabela_variaveis.parents
 
-            print("ret")
+            print("ret") # <<<<<
 
         #variavel
         elif "variavel" in no and no["tipo"] != "atribuicao":
@@ -242,7 +242,7 @@ class AnalisadorSemantico:
                 #marca variavel como usada
                 self.tabela_variaveis[nome]["usada"] = True
 
-                print(f"set {self.funcao_atual}():{nome} {valor}")
+                print(f"set {self.funcao_atual}():{nome} {valor}")# <<<<<<<
 
         #funcoes
         elif no.get("tipo") == "chamada_funcao": 
@@ -266,15 +266,11 @@ class AnalisadorSemantico:
         elif no.get("tipo") == "saida":
             print(f"saida: {no['expressao']}")
 
-
-#gera AST
 ast = analisar_codigo(codigo_java)
 
-#executa analise semantica
 if ast:
     analisador_semantico = AnalisadorSemantico()
 
-    #percorre programa
     for item in ast["programa"]:
         analisador_semantico.analisador_semantico(item)
 
@@ -282,7 +278,61 @@ class Interpretador:
     def __init__(self, bytecode):
         self.bytecode = bytecode
         self.variaveis = {}
+        self.funcao_atual = ""
 
-def executar(self):
-    for item in self.bytecode:
-        pass
+    def executar(self):
+        print("\n Interpretando...")
+        for linha in self.bytecode:
+            partes = linha.split()
+            
+            if not partes:
+                continue
+
+            if partes[0] == "fun":
+                self.funcao_atual = partes[1].replace("()", "")
+                
+            elif partes[0] == "set":
+                self.variaveis[partes[1]] = int(partes[2])
+                
+            elif partes[0] == "saida:":
+                expressao = " ".join(partes[1:]) 
+                nome_com_escopo = f"{self.funcao_atual}():{expressao}"
+                
+                if nome_com_escopo in self.variaveis:
+                    print(self.variaveis[nome_com_escopo])
+                else:
+                    print(expressao.replace('"', ''))
+                    
+            elif partes[0] == "sub":
+
+                pass
+                
+            elif partes[0] == "ret":
+                pass
+
+codigo_java = """
+class MinhaClasse {
+    public static void main(String[] args) {
+        int x;
+        x = 5;
+        if (x > 0) {
+            System.out.println(x);
+        } else {
+            System.out.println("x é menor ou igual a 0");
+        }
+    }
+}
+"""
+ast = analisar_codigo(codigo_java)
+
+if ast:
+    analisador_sem = AnalisadorSemantico()
+    for item in ast["programa"]:
+        analisador_sem.analisador_semantico(item)
+        
+    print("\n Bytecode")
+    for instrucao in analisador_sem.bytecode:
+        print(instrucao)
+
+    interpretador = Interpretador(analisador_sem.bytecode)
+    interpretador.executar()
